@@ -74,6 +74,7 @@ def from_spotify_url(
         print(f'Skipping "{converted_file_name}" as it\'s already downloaded')
         raise OSError(f"{converted_file_name} already downloaded")
 
+
     # Get the song's downloadable audio link
     if use_youtube:
         print(f'Searching YouTube for "{display_name}"', end="\r")
@@ -523,6 +524,34 @@ def from_saved_tracks(
         saved_tracks_response = response
         saved_tracks.extend(saved_tracks_response["items"])
 
+    def track_exists(track):
+        raw_track_meta = track.get("track")
+        song_name = raw_track_meta["name"]
+        contributing_artists = [artist["name"] for artist in raw_track_meta["artists"]]
+        display_name = ", ".join(contributing_artists) + " - " + song_name
+
+        # Create file name
+        converted_file_name = SongObject.create_file_name(
+            song_name, [artist["name"] for artist in raw_track_meta["artists"]]
+        )
+
+        # If song name is too long use only first artist
+        if len(converted_file_name) > 250:
+            converted_file_name = SongObject.create_file_name(
+                song_name, [raw_track_meta["artists"][0]["name"]]
+            )
+
+        converted_file_path = Path(".", f"{converted_file_name}.{output_format}")
+
+        # Alternate file path.
+        alternate_file_path = Path(".", f"{display_name}.{output_format}")
+
+        if converted_file_path.is_file() or alternate_file_path.is_file():
+            print(f'Skipping "{converted_file_name}" as it\'s already downloaded')
+            return True
+
+        return False
+
     # Remove songs  without id
     saved_tracks = [
         track
@@ -530,6 +559,7 @@ def from_saved_tracks(
         if track is not None
         and track.get("track") is not None
         and track.get("track", {}).get("id") is not None
+        and not track_exists(track)
     ]
 
     def get_song(track):
