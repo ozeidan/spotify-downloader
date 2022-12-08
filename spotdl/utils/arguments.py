@@ -349,6 +349,12 @@ def parse_output_options(parser: _ArgumentGroup):
         help=f"Specify the downloaded file name format, available variables: {', '.join(VARS)}",
     )
 
+    parser.add_argument(
+        "--output-directory",
+        type=str,
+        help=f"Specify the directory into which the songs are downloaded.",
+    )
+
     # Add m3u argument
     parser.add_argument(
         "--m3u",

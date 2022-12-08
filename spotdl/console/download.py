@@ -10,6 +10,7 @@ from pathlib import Path
 from spotdl.download.downloader import Downloader
 from spotdl.utils.m3u import gen_m3u_files
 from spotdl.utils.search import get_simple_songs
+from spotdl.utils.formatter import create_file_name, restrict_filename
 from spotdl.utils.archive import Archive
 
 
@@ -34,6 +35,7 @@ def download(
 
     # Parse the query
     songs = get_simple_songs(query)
+    # songs = [song if not_exists(create_file_name(song)) for song in get_simple_songs(query)]
 
     url_archive: Archive = Archive()
     if archive:

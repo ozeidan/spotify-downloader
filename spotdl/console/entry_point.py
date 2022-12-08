@@ -157,6 +157,7 @@ def entry_point():
     # Initialize the downloader
     # for download, load and preload operations
     downloader = Downloader(
+        settings["output_directory"],
         audio_providers=settings["audio_providers"],
         lyrics_providers=settings["lyrics_providers"],
         ffmpeg=settings["ffmpeg"],

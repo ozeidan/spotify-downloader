@@ -11,14 +11,14 @@ import concurrent.futures
 import traceback
 
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple, Type
+from typing import Dict, List, Optional, Tuple, Type, Set
 
 from yt_dlp.postprocessor.sponsorblock import SponsorBlockPP
 from yt_dlp.postprocessor.modify_chapters import ModifyChaptersPP
 
 from spotdl.types import Song
 from spotdl.utils.ffmpeg import FFmpegError, convert, get_ffmpeg_path
-from spotdl.utils.metadata import embed_metadata, MetadataError
+from spotdl.utils.metadata import embed_metadata, MetadataError, get_mp3_comment
 from spotdl.utils.formatter import create_file_name, restrict_filename
 from spotdl.providers.audio.base import AudioProvider
 from spotdl.providers.lyrics import Genius, MusixMatch, AzLyrics
@@ -66,6 +66,7 @@ class Downloader:
 
     def __init__(
         self,
+        output_directory,
         audio_providers: Optional[List[str]] = None,
         lyrics_providers: Optional[List[str]] = None,
         ffmpeg: str = "ffmpeg",
@@ -73,7 +74,7 @@ class Downloader:
         ffmpeg_args: Optional[str] = None,
         output_format: str = "mp3",
         threads: int = 4,
-        output: str = ".",
+        output: str = "",
         save_file: Optional[str] = None,
         overwrite: str = "skip",
         cookie_file: Optional[str] = None,
@@ -174,6 +175,7 @@ class Downloader:
 
         self.output = output
         self.output_format = output_format
+        self.output_directory = output_directory
         self.save_file = save_file
         self.threads = threads
         self.cookie_file = cookie_file
@@ -227,6 +229,15 @@ class Downloader:
         - list of tuples with the song and the path to the downloaded file if successful.
         """
 
+
+        existing_urls = self.get_existing_spotify_urls()
+        skip_songs = [song for song in songs if song.url in existing_urls]
+
+        if len(skip_songs) > 0:
+            self.progress_handler.log(f"Skipping {len(skip_songs)} song(s), as they already exist in the directory.")
+
+        songs = [song for song in songs if song.url not in existing_urls]
+
         self.progress_handler.set_song_count(len(songs))
 
         tasks = [self.pool_download(song) for song in songs]
@@ -268,6 +279,21 @@ class Downloader:
             return await self.loop.run_in_executor(
                 self.thread_executor, self.search_and_download, song
             )
+
+    def get_existing_spotify_urls(self) -> Set[str]:
+        output_directory = Path(self.output_directory)
+        existing_mp3_files = output_directory.glob("*.mp3")
+
+        return set(
+            [
+                comment
+                for comment in [
+                    get_mp3_comment(existing_file)
+                    for existing_file in existing_mp3_files
+                ]
+                if comment is not None
+            ]
+        )
 
     def search(self, song: Song) -> Tuple[str, AudioProvider]:
         """
@@ -364,7 +390,9 @@ class Downloader:
         display_progress_tracker = self.progress_handler.get_new_tracker(song)
 
         # Create the output file path
-        output_file = create_file_name(song, self.output, self.output_format)
+        output_file = self.output_directory / create_file_name(
+            song, self.output, self.output_format
+        )
         temp_folder = get_temp_path()
 
         # Restrict the filename if needed

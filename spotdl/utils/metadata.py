@@ -121,10 +121,25 @@ def set_id3_mp3(output_file: Path, song: Song):
             encoding=3, lang="eng", desc="desc", text=song.lyrics
         )
 
-    if song.download_url:
-        temp_audio_file.add(Comment(encoding=3, text=song.download_url))
+    if song.url:
+        temp_audio_file.add(Comment(encoding=3, text=song.url))
 
     temp_audio_file.save(v2_version=3)
+
+
+def get_mp3_comment(file_path: Path) -> Optional[str]:
+    file: ID3 = ID3(str(file_path.resolve()))
+    comment_frames = file.getall("COMM")
+
+    if len(comment_frames) == 0:
+        return None
+
+    comment_texts = comment_frames[0].text
+
+    if len(comment_texts) == 0:
+        return None
+
+    return comment_texts[0]
 
 
 def set_id3_m4a(output_file: Path, song: Song):

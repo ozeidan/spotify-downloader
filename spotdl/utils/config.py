@@ -128,6 +128,7 @@ DEFAULT_CONFIG = {
     "save_file": None,
     "m3u": None,
     "output": "{artists} - {title}.{output-ext}",
+    "output_directory": ".",
     "overwrite": "skip",
     "client_id": "5f573c9620494bae87890c0f08a60293",
     "client_secret": "212476d9b0f3472eaa762d90b19b0ba8",
