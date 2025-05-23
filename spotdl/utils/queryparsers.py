@@ -1,5 +1,4 @@
 import json
-import requests
 from abc import ABC, abstractmethod
 from typing import Optional, Tuple, List
 
@@ -8,19 +7,17 @@ from spotdl.types.artist import Artist
 from spotdl.types.playlist import Playlist
 from spotdl.types.saved import Saved
 from spotdl.types.song import Song, SongList
-from spotdl.utils.search import (
+
+from spotdl.utils.songfetchers import (
     get_all_user_playlists,
     get_user_followed_artists,
     get_user_saved_albums,
     get_all_saved_playlists,
-)
-from spotdl.utils.search import (
     create_ytm_album,
     create_ytm_playlist,
     get_ytm_client,
-    get_simple_songs,
 )
-from spotdl.utils.search import QueryError
+from spotdl.utils.errors import QueryError
 
 __all__ = ["get_query_parsers"]
 
@@ -171,25 +168,6 @@ class SpotifyTrackParser(QueryParser):
         self, request: str, use_ytm_data: bool = False
     ) -> Tuple[Optional[Song], Optional[SongList]]:
         return Song.from_url(url=request), None
-
-
-class SpotifyLinkParser(QueryParser):
-    def can_handle(self, request: str) -> bool:
-        return "https://spotify.link/" in request
-
-    def parse(
-        self, request: str, use_ytm_data: bool = False
-    ) -> Tuple[Optional[Song], Optional[SongList]]:
-        resp = requests.head(request, allow_redirects=True, timeout=10)
-        full_url = resp.url
-        full_lists = get_simple_songs(
-            [full_url],
-            use_ytm_data=use_ytm_data,
-            playlist_numbering=False,
-            album_type=None,
-            playlist_retain_track_cover=False,
-        )
-        return full_lists[0] if full_lists else None, None
 
 
 class SpotifyPlaylistParser(QueryParser):
@@ -346,7 +324,6 @@ def get_query_parsers() -> List[QueryParser]:
         YouTubeMusicTrackParser(),
         YouTubePlaylistParser(),
         SpotifyTrackParser(),
-        SpotifyLinkParser(),
         SpotifyPlaylistParser(),
         SpotifyAlbumParser(),
         SpotifyArtistParser(),
