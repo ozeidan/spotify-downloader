@@ -6,22 +6,20 @@ To use this module you must first initialize the SpotifyClient.
 """
 
 import concurrent.futures
-import json
 import logging
 import re
 from pathlib import Path
 from typing import Dict, List, Optional
 
-import requests
 from ytmusicapi import YTMusic
 
 from spotdl.types.album import Album
 from spotdl.types.artist import Artist
 from spotdl.types.playlist import Playlist
-from spotdl.types.saved import Saved
 from spotdl.types.song import Song, SongList
 from spotdl.utils.metadata import get_file_metadata
 from spotdl.utils.spotify import SpotifyClient, SpotifyError
+from spotdl.utils.queryparsers import get_query_parsers
 
 __all__ = [
     "QueryError",
@@ -136,161 +134,23 @@ def get_simple_songs(
 
     songs: List[Song] = []
     lists: List[SongList] = []
+
+    parsers = get_query_parsers()
+
     for request in query:
         logger.info("Processing query: %s", request)
 
         # Remove /intl-xxx/ from Spotify URLs with regex
         request = re.sub(r"\/intl-\w+\/", "/", request)
 
-        if (
-            (  # pylint: disable=too-many-boolean-expressions
-                "watch?v=" in request
-                or "youtu.be/" in request
-                or "soundcloud.com/" in request
-                or "bandcamp.com/" in request
-            )
-            and "open.spotify.com" in request
-            and "track" in request
-            and "|" in request
-        ):
-            split_urls = request.split("|")
-            if (
-                len(split_urls) <= 1
-                or not (
-                    "watch?v=" in split_urls[0]
-                    or "youtu.be" in split_urls[0]
-                    or "soundcloud.com/" in split_urls[0]
-                    or "bandcamp.com/" in split_urls[0]
-                )
-                or "spotify" not in split_urls[1]
-            ):
-                raise QueryError(
-                    'Incorrect format used, please use "YouTubeURL|SpotifyURL"'
-                )
-
-            songs.append(
-                Song.from_missing_data(url=split_urls[1], download_url=split_urls[0])
-            )
-        elif "music.youtube.com/watch?v" in request:
-            track_data = get_ytm_client().get_song(request.split("?v=", 1)[1])
-
-            yt_song = Song.from_search_term(
-                f"{track_data['videoDetails']['author']} - {track_data['videoDetails']['title']}"
-            )
-
-            if use_ytm_data:
-                yt_song.name = track_data["title"]
-                yt_song.artist = track_data["author"]
-                yt_song.artists = [track_data["author"]]
-                yt_song.duration = track_data["lengthSeconds"]
-
-            yt_song.download_url = request
-            songs.append(yt_song)
-        elif (
-            "youtube.com/playlist?list=" in request
-            or "youtube.com/browse/VLPL" in request
-        ):
-            request = request.replace(
-                "https://www.youtube.com/", "https://music.youtube.com/"
-            )
-            request = request.replace(
-                "https://youtube.com/", "https://music.youtube.com/"
-            )
-
-            split_urls = request.split("|")
-            if len(split_urls) == 1:
-                if "?list=OLAK5uy_" in request:
-                    lists.append(create_ytm_album(request, fetch_songs=False))
-                elif "?list=PL" in request or "browse/VLPL" in request:
-                    lists.append(create_ytm_playlist(request, fetch_songs=False))
-            else:
-                if ("spotify" not in split_urls[1]) or not any(
-                    x in split_urls[0]
-                    for x in ["?list=PL", "?list=OLAK5uy_", "browse/VLPL"]
-                ):
-                    raise QueryError(
-                        'Incorrect format used, please use "YouTubeMusicURL|SpotifyURL". '
-                        "Currently only supports YouTube Music playlists and albums."
-                    )
-
-                if ("open.spotify.com" in request and "album" in request) and (
-                    "?list=OLAK5uy_" in request
-                ):
-                    ytm_list: SongList = create_ytm_album(
-                        split_urls[0], fetch_songs=False
-                    )
-                    spot_list = Album.from_url(split_urls[1], fetch_songs=False)
-                elif ("open.spotify.com" in request and "playlist" in request) and (
-                    "?list=PL" in request or "browse/VLPL" in request
-                ):
-                    ytm_list = create_ytm_playlist(split_urls[0], fetch_songs=False)
-                    spot_list = Playlist.from_url(split_urls[1], fetch_songs=False)
-                else:
-                    raise QueryError(
-                        f"URLs are not of the same type, {split_urls[0]} is not "
-                        f"the same type as {split_urls[1]}."
-                    )
-
-                if ytm_list.length != spot_list.length:
-                    raise QueryError(
-                        f"The YouTube Music ({ytm_list.length}) "
-                        f"and Spotify ({spot_list.length}) lists have different lengths. "
-                    )
-
-                if use_ytm_data:
-                    for index, song in enumerate(ytm_list.songs):
-                        song.url = spot_list.songs[index].url
-
-                    lists.append(ytm_list)
-                else:
-                    for index, song in enumerate(spot_list.songs):
-                        song.download_url = ytm_list.songs[index].download_url
-
-                    lists.append(spot_list)
-        elif "open.spotify.com" in request and "track" in request:
-            songs.append(Song.from_url(url=request))
-        elif "https://spotify.link/" in request:
-            resp = requests.head(request, allow_redirects=True, timeout=10)
-            full_url = resp.url
-            full_lists = get_simple_songs(
-                [full_url],
-                use_ytm_data=use_ytm_data,
-                playlist_numbering=playlist_numbering,
-                album_type=album_type,
-                playlist_retain_track_cover=playlist_retain_track_cover,
-            )
-            songs.extend(full_lists)
-        elif "open.spotify.com" in request and "playlist" in request:
-            lists.append(Playlist.from_url(request, fetch_songs=False))
-        elif "open.spotify.com" in request and "album" in request:
-            lists.append(Album.from_url(request, fetch_songs=False))
-        elif "open.spotify.com" in request and "artist" in request:
-            lists.append(Artist.from_url(request, fetch_songs=False))
-        elif "open.spotify.com" in request and "user" in request:
-            lists.extend(get_all_user_playlists(request))
-        elif "album:" in request:
-            lists.append(Album.from_search_term(request, fetch_songs=False))
-        elif "playlist:" in request:
-            lists.append(Playlist.from_search_term(request, fetch_songs=False))
-        elif "artist:" in request:
-            lists.append(Artist.from_search_term(request, fetch_songs=False))
-        elif request == "saved":
-            lists.append(Saved.from_url(request, fetch_songs=False))
-        elif request == "all-user-playlists":
-            lists.extend(get_all_user_playlists())
-        elif request == "all-user-followed-artists":
-            lists.extend(get_user_followed_artists())
-        elif request == "all-user-saved-albums":
-            lists.extend(get_user_saved_albums())
-        elif request == "all-saved-playlists":
-            lists.extend(get_all_saved_playlists())
-        elif request.endswith(".spotdl"):
-            with open(request, "r", encoding="utf-8") as save_file:
-                for track in json.load(save_file):
-                    # Append to songs
-                    songs.append(Song.from_dict(track))
-        else:
-            songs.append(Song.from_search_term(request))
+        for parser in parsers:
+            if parser.can_handle(request):
+                song, song_list = parser.parse(request, use_ytm_data)
+                if song:
+                    songs.append(song)
+                if song_list:
+                    lists.append(song_list)
+                break
 
     for song_list in lists:
         logger.info(
