@@ -153,41 +153,13 @@ def get_simple_songs(
                 break
 
     for song_list in lists:
-        logger.info(
-            "Found %s songs in %s (%s)",
-            len(song_list.urls),
-            song_list.name,
-            song_list.__class__.__name__,
+        songs.extend(
+            process_song_list(
+                song_list,
+                playlist_numbering=playlist_numbering,
+                playlist_retain_track_cover=playlist_retain_track_cover,
+            )
         )
-
-        for index, song in enumerate(song_list.songs):
-            song_data = song.json
-            song_data["list_name"] = song_list.name
-            song_data["list_url"] = song_list.url
-            song_data["list_position"] = song.list_position
-            song_data["list_length"] = song_list.length
-
-            if playlist_numbering:
-                song_data["track_number"] = song_data["list_position"]
-                song_data["tracks_count"] = song_data["list_length"]
-                song_data["album_name"] = song_data["list_name"]
-                song_data["disc_number"] = 1
-                song_data["disc_count"] = 1
-                if isinstance(song_list, Playlist):
-                    song_data["album_artist"] = song_list.author_name
-                    song_data["cover_url"] = song_list.cover_url
-
-            if playlist_retain_track_cover:
-                song_data["track_number"] = song_data["list_position"]
-                song_data["tracks_count"] = song_data["list_length"]
-                song_data["album_name"] = song_data["list_name"]
-                song_data["disc_number"] = 1
-                song_data["disc_count"] = 1
-                song_data["cover_url"] = song_data["cover_url"]
-                if isinstance(song_list, Playlist):
-                    song_data["album_artist"] = song_list.author_name
-
-            songs.append(Song.from_dict(song_data))
 
     # removing songs for --ignore-albums
     original_length = len(songs)
@@ -211,6 +183,51 @@ def get_simple_songs(
         )
 
     logger.debug("Found %s songs in %s lists", len(songs), len(lists))
+
+    return songs
+
+
+def process_song_list(
+    song_list: SongList,
+    playlist_numbering: bool = False,
+    playlist_retain_track_cover: bool = False,
+) -> List[Song]:
+    songs = []
+    logger.info(
+        "Found %s songs in %s (%s)",
+        len(song_list.urls),
+        song_list.name,
+        song_list.__class__.__name__,
+    )
+
+    for song in song_list.songs:
+        song_data = song.json
+        song_data["list_name"] = song_list.name
+        song_data["list_url"] = song_list.url
+        song_data["list_position"] = song.list_position
+        song_data["list_length"] = song_list.length
+
+        if playlist_numbering:
+            song_data["track_number"] = song_data["list_position"]
+            song_data["tracks_count"] = song_data["list_length"]
+            song_data["album_name"] = song_data["list_name"]
+            song_data["disc_number"] = 1
+            song_data["disc_count"] = 1
+            if isinstance(song_list, Playlist):
+                song_data["album_artist"] = song_list.author_name
+                song_data["cover_url"] = song_list.cover_url
+
+        if playlist_retain_track_cover:
+            song_data["track_number"] = song_data["list_position"]
+            song_data["tracks_count"] = song_data["list_length"]
+            song_data["album_name"] = song_data["list_name"]
+            song_data["disc_number"] = 1
+            song_data["disc_count"] = 1
+            song_data["cover_url"] = song_data["cover_url"]
+            if isinstance(song_list, Playlist):
+                song_data["album_artist"] = song_list.author_name
+
+        songs.append(Song.from_dict(song_data))
 
     return songs
 
